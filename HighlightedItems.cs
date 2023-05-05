@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Threading;
 using ExileCore.PoEMemory.Components;
+using static ExileCore.PoEMemory.MemoryObjects.ServerInventory;
 
 namespace HighlightedItems
 {
@@ -59,7 +60,7 @@ namespace HighlightedItems
             if (stashPanel.IsVisible)
             {
                 var visibleStash = stashPanel.VisibleStash;
-                if (visibleStash == null)
+                if (visibleStash == null || visibleStash.InventoryUIElement == null)
                     return;
 
                 //Determine Stash Pickup Button position and draw
@@ -111,12 +112,15 @@ namespace HighlightedItems
                 Graphics.DrawImage("pickL.png", pickButtonRect);
                 if (isButtonPressed(pickButtonRect))
                 {
-                    var inventoryItems = inventoryPanel[InventoryIndex.PlayerInventory].VisibleInventoryItems
+                    var inventoryItemsServer = GameController.IngameState.Data.ServerData.PlayerInventories[0].Inventory.
+                        InventorySlotItems.OrderBy(x => x.PosX).ThenBy(x => x.PosY).ToList();
+
+                    /*var inventoryItems = inventoryPanel[InventoryIndex.PlayerInventory].VisibleInventoryItems
                        .OrderBy(x => x.InventPosX)
                        .ThenBy(x => x.InventPosY)
                        .ToList();
-
-                    _currentOperation = MoveItemsToStash(inventoryItems).GetEnumerator();
+                    */
+                    _currentOperation = MoveItemsToStash(inventoryItemsServer).GetEnumerator();
                 }
             }
         }
@@ -134,7 +138,7 @@ namespace HighlightedItems
                 yield return false;
             }
 
-            if (Settings.IdleMouseDelay.Value == 0)
+            if (Settings.DelaySettings.IdleMouseDelay.Value == 0)
             {
                 yield break;
             }
@@ -156,7 +160,7 @@ namespace HighlightedItems
                     mousePos = newPos;
                     sw.Restart();
                 }
-                else if (sw.ElapsedMilliseconds >= Settings.IdleMouseDelay.Value)
+                else if (sw.ElapsedMilliseconds >= Settings.DelaySettings.IdleMouseDelay.Value)
                 {
                     yield break;
                 }
@@ -167,7 +171,7 @@ namespace HighlightedItems
             }
         }
 
-        private IEnumerable<bool> MoveItemsToStash(IList<NormalInventoryItem> items)
+        private IEnumerable<bool> MoveItemsToStash(IList<InventSlotItem> items)
         {
             var cts = new CancellationTokenSource();
             foreach (var _ in MoveItemsCommonPreamble(cts)) { yield return false; }
@@ -236,7 +240,7 @@ namespace HighlightedItems
                     break;
                 }
 
-                if (IsInventoryFull())
+                if (IsInventoryFull_serverInventory())
                 {
                     DebugWindow.LogMsg("HighlightedItems: Inventory full, aborting loop");
                     break;
@@ -266,11 +270,56 @@ namespace HighlightedItems
                 return new List<NormalInventoryItem>();
             }
         }
+        private bool IsInventoryFull_serverInventory()
+        {
+            var inventoryItems = ingameState.ServerData.PlayerInventories[0].Inventory.InventorySlotItems;
 
+            // quick sanity check
+            if (inventoryItems.Count < 12)
+            {
+                return false;
+            }
+
+            // track each inventory slot
+            bool[,] inventorySlot = new bool[12, 5];
+
+            // iterate through each item in the inventory and mark used slots
+            foreach (var inventoryItem in inventoryItems)
+            {
+                int x = inventoryItem.PosX;
+                int y = inventoryItem.PosY;
+                int height = inventoryItem.SizeY;
+                int width = inventoryItem.SizeX;
+                for (int row = x; row < x + width; row++)
+                {
+                    for (int col = y; col < y + height; col++)
+                    {
+                        inventorySlot[row, col] = true;
+                    }
+                }
+            }
+
+            // check for any empty slots
+            for (int x = 0; x < 12; x++)
+            {
+                for (int y = 0; y < 5; y++)
+                {
+                    if (inventorySlot[x, y] == false)
+                    {
+                        return false;
+                    }
+                }
+            }
+            // no empty slots, so inventory is full
+            return true;
+        }
+        [Obsolete]
         private bool IsInventoryFull()
         {
             var inventoryPanel = ingameState.IngameUi.InventoryPanel;
             var inventoryItems = inventoryPanel[InventoryIndex.PlayerInventory].VisibleInventoryItems;
+
+            
 
             // quick sanity check
             if (inventoryItems.Count < 12)
@@ -311,10 +360,10 @@ namespace HighlightedItems
             // no empty slots, so inventory is full
             return true;
         }
-        private static readonly TimeSpan KeyDelay = TimeSpan.FromMilliseconds(10);
-        private static readonly TimeSpan MouseMoveDelay = TimeSpan.FromMilliseconds(20);
-        private TimeSpan MouseDownDelay => TimeSpan.FromMilliseconds(5 + Settings.ExtraDelay.Value);
-        private static readonly TimeSpan MouseUpDelay = TimeSpan.FromMilliseconds(5);
+        private TimeSpan KeyDelay => TimeSpan.FromMilliseconds(Settings.DelaySettings.KeyDelay.Value);
+        private TimeSpan MouseMoveDelay => TimeSpan.FromMilliseconds(Settings.DelaySettings.MouseMoveDelay.Value);
+        private TimeSpan MouseDownDelay => TimeSpan.FromMilliseconds(5 + Settings.DelaySettings.ExtraDelay.Value);
+        private TimeSpan MouseUpDelay => TimeSpan.FromMilliseconds(5 + Settings.DelaySettings.ExtraDelay.Value);
 
         private IEnumerable<bool> MoveItem(SharpDX.Vector2 itemPosition)
         {
@@ -360,10 +409,10 @@ namespace HighlightedItems
         }
 
 
-        private bool CheckIgnoreCells(NormalInventoryItem inventItem)
+        private bool CheckIgnoreCells(InventSlotItem inventItem)
         {
-            var inventPosX = inventItem.InventPosX;
-            var inventPosY = inventItem.InventPosY;
+            var inventPosX = inventItem.PosX;
+            var inventPosY = inventItem.PosY;
 
             if (inventPosX < 0 || inventPosX >= 12)
                 return true;
