@@ -1,7 +1,5 @@
-﻿using HighlightedItems;
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace HighlightedItems.Utils
@@ -30,27 +28,9 @@ namespace HighlightedItems.Utils
             keybd_event((byte)key, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0);
         }
 
-        public static void KeyPress(Keys key)
-        {
-            KeyDown(key);
-            Thread.Sleep(Constants.CLICK_DELAY);
-            KeyUp(key);
-        }
-
-        public static bool IsKeyDown(Keys key)
-        {
-            return GetKeyState((int)key) < 0;
-        }
-
         public static bool IsKeyPressed(Keys key)
         {
             return Convert.ToBoolean(GetKeyState((int)key) & KEY_PRESSED);
-        }
-
-
-        public static bool IsKeyToggled(Keys key)
-        {
-            return Convert.ToBoolean(GetKeyState((int)key) & KEY_TOGGLED);
         }
     }
 }
